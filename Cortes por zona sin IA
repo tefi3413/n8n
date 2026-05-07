@@ -1,0 +1,168 @@
+﻿{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data || $input.first().json.body || \"\";\n\nconst textoLimpio = html\n  .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, \"\")\n  .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, \"\")\n  .replace(/<[^>]+>/g, \" \")\n  .replace(/&[a-z]+;/gi, \" \")\n  .replace(/\\s+/g, \" \")\n  .trim();\n\n// DESCRIPCION DE CALLES\nconst MI_ZONA = [\n  \"ruta 22\",\n  \"pachecho\",\n  \"puente carretero\",\n  \"lisandro la torre\"\n];\n\n// Ciudad — para asegurarse que el post es de Cipolletti\nconst MI_CIUDAD = [\"cipolletti\"];\n\n// Dividir el HTML en bloques por artículo\n// Cada post de EDERSA tiene un <article> separado — los separamos por título\nconst bloques = textoLimpio\n  .split(/(?=EdERSA|EDERSA TRABAJA|Corte programado|CORTE PROGRAMADO|CORTE GENERAL)/i)\n  .filter(b => b.trim().length > 100);\n\n// Filtrar bloques que mencionan MI CIUDAD y MI ZONA al mismo tiempo\nconst bloquesRelevantes = bloques.filter(b => {\n  const bl = b.toLowerCase();\n  const esDeCiudad = MI_CIUDAD.some(c => bl.includes(c));\n  const esDeMiZona = MI_ZONA.some(kw => bl.includes(kw));\n  return esDeCiudad && esDeMiZona;\n});\n\nconst hayCorte = bloquesRelevantes.length > 0;\nconst matches = MI_ZONA.filter(kw =>\n  bloquesRelevantes.some(b => b.toLowerCase().includes(kw))\n);\n\n// Regex para horarios\nconst regexHorario = /de\\s+(?:las?\\s+)?(\\d{1,2}(?::\\d{2})?)\\s*(?:hs\\.?\\s*)?a\\s+(?:alrededor de las?\\s+)?(?:las?\\s+)?(\\d{1,2}(?::\\d{2})?)/gi;\n\n// Regex para fechas\nconst regexFecha = /(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\\s+\\d{1,2}[\\/\\-]\\d{1,2}|\\d{1,2}\\s+de\\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)(?:\\s+de\\s+\\d{4})?/gi;\n\n// Regex para motivo\nconst regexMotivo = /(?:mantenimiento|modernizaci[oó]n|poda|reemplazo|instalaci[oó]n|obra|recambio|tareas|trabajos|vinculaci[oó]n|subestaci[oó]n)[^.]{0,100}/gi;\n\nfunction formatHora(h) {\n  if (!h) return \"?\";\n  return h.includes(\":\") ? h : h + \":00\";\n}\n\nconst cortesFinales = [];\n\nbloquesRelevantes.forEach((bloque, i) => {\n  const horariosEncontrados = [...bloque.matchAll(regexHorario)];\n  const fechasEncontradas = bloque.match(regexFecha);\n  const motivosEncontrados = bloque.match(regexMotivo);\n\n  // Extraer texto relevante limpio (primeras 300 chars del bloque)\n  const textoCorto = bloque.substring(0, 350).trim();\n\n  if (horariosEncontrados.length > 0) {\n    horariosEncontrados.forEach((h, j) => {\n      cortesFinales.push({\n        zona: matches.join(\", \"),\n        hora_inicio: formatHora(h[1]),\n        hora_fin: formatHora(h[2]),\n        fecha: fechasEncontradas ? fechasEncontradas[j] || fechasEncontradas[0] : new Date().toLocaleDateString(\"es-AR\"),\n        motivo: motivosEncontrados ? motivosEncontrados[0].trim() : \"Ver web de EDERSA\",\n        detalle: textoCorto\n      });\n    });\n  } else {\n    // No pudo parsear horario pero la zona matchea — avisar igual\n    cortesFinales.push({\n      zona: matches.join(\", \"),\n      hora_inicio: \"Revisar\",\n      hora_fin: \"Revisar\",\n      fecha: fechasEncontradas ? fechasEncontradas[0] : new Date().toLocaleDateString(\"es-AR\"),\n      motivo: motivosEncontrados ? motivosEncontrados[0].trim() : \"Corte detectado en tu zona\",\n      detalle: textoCorto\n    });\n  }\n});\n\nconst resumenEmail = cortesFinales.map((c, i) =>\n  `<div style=\"margin-bottom:16px;padding:14px;background:#fff8f8;border-left:4px solid #e74c3c;border-radius:4px;font-family:Arial,sans-serif;\">\n    <p style=\"margin:0 0 6px;\"><strong>Corte ${i + 1}</strong></p>\n    <p style=\"margin:0 0 4px;\">📍 <strong>Zona:</strong> ${c.zona}</p>\n    <p style=\"margin:0 0 4px;\">🕐 <strong>Horario:</strong> ${c.hora_inicio} a ${c.hora_fin}</p>\n    <p style=\"margin:0 0 4px;\">📅 <strong>Fecha:</strong> ${c.fecha}</p>\n    <p style=\"margin:0 0 4px;\">🔧 <strong>Motivo:</strong> ${c.motivo}</p>\n    <p style=\"margin:8px 0 0;font-size:12px;color:#666;border-top:1px solid #eee;padding-top:8px;\">📄 ${c.detalle}</p>\n  </div>`\n).join(\"\");\n\nconst resumenSlack = cortesFinales.map((c, i) =>\n  `*Corte ${i + 1}*\\n📍 *Zona:* ${c.zona}\\n🕐 *Horario:* ${c.hora_inicio} a ${c.hora_fin}\\n📅 *Fecha:* ${c.fecha}\\n🔧 *Motivo:* ${c.motivo}\\n_${c.detalle.substring(0, 150)}_`\n).join(\"\\n\\n\");\n\nreturn [{\n  json: {\n    hayCorte,\n    cortes: cortesFinales,\n    resumenEmail,\n    resumenSlack,\n    cantidad: cortesFinales.length,\n    fecha: new Date().toLocaleDateString(\"es-AR\")\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -512
+      ],
+      "id": "ce5f37a4-24c1-44a2-977b-745d70684640",
+      "name": "Parsear y filtrar zona exacta"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-hayCorte",
+              "leftValue": "={{ $json.hayCorte }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        640,
+        -512
+      ],
+      "id": "f9b4ac96-3e88-4127-882a-9fe95cb7f522",
+      "name": "Hay corte en mi zona exacta?"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            },
+            {
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -32,
+        -512
+      ],
+      "id": "838b21ec-4fa6-4976-b18b-cde54b4700c2",
+      "name": "Schedule Trigger3"
+    },
+    {
+      "parameters": {
+        "url": "https://www.edersa.com.ar/category/cortes-programados",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        192,
+        -512
+      ],
+      "id": "628014f5-99f9-49d3-af15-8e7a82cc0a8e",
+      "name": "HTTP Request EDERSA2"
+    },
+    {
+      "parameters": {
+        "sendTo": "euribe@casinosdelrio.com.ar",
+        "subject": "=⚡ Corte de luz en tu zona — {{ $json.fecha }}",
+        "message": "=<div style=\"font-family:Arial,sans-serif;max-width:600px;\">\n  <h2 style=\"color:#e74c3c;border-bottom:2px solid #e74c3c;padding-bottom:8px;\">⚡ Corte programado en tu zona</h2>\n  <p><strong>Fecha de consulta:</strong> {{ $json.fecha }}</p>\n  <p><strong>Cortes encontrados:</strong> {{ $json.cantidad }}</p>\n  <hr style=\"border:none;border-top:1px solid #eee;margin:16px 0;\">\n  {{ $json.resumenEmail }}\n  <hr style=\"border:none;border-top:1px solid #eee;margin:16px 0;\">\n  <p style=\"font-size:12px;color:#888;\">\n    <a href=\"https://www.edersa.com.ar/category/cortes-programados\">Ver todos los cortes en EDERSA</a> &nbsp;|&nbsp;\n    <a href=\"https://contingencias.edersa.com.ar/\">Mapa de cortes y contingencias</a>\n  </p>\n</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        -528
+      ],
+      "id": "9ffe8ae1-f057-47ab-95cf-8878e235c930",
+      "name": "Gmail - Alerta corte2",
+      "webhookId": "c6997842-1554-4594-a34a-46a1f89eed81",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4Q20RMIFXr2J3Xfd",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Parsear y filtrar zona exacta": {
+      "main": [
+        [
+          {
+            "node": "Hay corte en mi zona exacta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay corte en mi zona exacta?": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Alerta corte2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request EDERSA2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request EDERSA2": {
+      "main": [
+        [
+          {
+            "node": "Parsear y filtrar zona exacta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d61e9d7087eed0ba4e62da3eb806652b1a8ac47079faa1f680b871c352d09115"
+  }
+}

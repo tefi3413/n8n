@@ -1,0 +1,240 @@
+﻿{
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://www.edersa.com.ar/category/cortes-programados",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1472,
+        -992
+      ],
+      "id": "dc1802e4-bbd8-470c-bfb0-8e5cf1b52bc5",
+      "name": "HTTP Request EDERSA1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data || $input.first().json.body || \"\";\n\nconst textoLimpio = html\n  .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, \"\")\n  .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, \"\")\n  .replace(/<[^>]+>/g, \" \")\n  .replace(/\\s+/g, \" \")\n  .trim()\n  .substring(0, 8000);\n\nreturn [{ json: { texto: textoLimpio } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1264,
+        -992
+      ],
+      "id": "35eb45c5-36a6-4f9f-8d04-4445fde05f42",
+      "name": "Limpiar HTML1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-hayCorte",
+              "leftValue": "={{ $json.hayCorte }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -608,
+        -992
+      ],
+      "id": "66f492d0-f8e4-49cc-8485-dc007d6089b4",
+      "name": "¿Hay corte en mi zona?1"
+    },
+    {
+      "parameters": {
+        "sendTo": "TU_EMAIL@gmail.com",
+        "subject": "=⚡ Corte de luz en Cipolletti — {{ $json.fecha }}",
+        "message": "=<h2 style=\"color:#e74c3c;\">⚡ Corte programado en tu zona</h2>\n<p><strong>Fecha de consulta:</strong> {{ $json.fecha }}</p>\n<p><strong>Cantidad de cortes encontrados:</strong> {{ $json.cantidad }}</p>\n<hr>\n{{ $json.resumenEmail }}\n<hr>\n<p style=\"font-size:12px;color:#888;\"><a href=\"https://www.edersa.com.ar/category/cortes-programados\">Ver todos los cortes en EDERSA</a> | <a href=\"https://contingencias.edersa.com.ar/\">Mapa de cortes y contingencias</a></p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -400,
+        -1008
+      ],
+      "id": "53b080ba-0a45-47b1-b833-4372d4b6259d",
+      "name": "Gmail - Alerta corte1",
+      "webhookId": "fd2be709-ec64-4cfc-b84c-0a5b79c0b481",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4Q20RMIFXr2J3Xfd",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            },
+            {
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1648,
+        -992
+      ],
+      "id": "573cf00b-51f8-4ae0-a3c3-7876b0bd7b29",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Extrae los cortes de luz para Cipolletti del siguiente texto y responde únicamente con el array JSON: {{ $json.texto }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "Actúa como un extractor de datos. Tu salida debe ser exclusivamente un array JSON válido. No incluyas saludos, ni introducciones, ni bloques de código markdown como ```json. Si no hay datos, devuelve [].",
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -1088,
+        -992
+      ],
+      "id": "7b10c7a6-d5ea-4ede-9fe9-b993c4fca1a4",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "p8CnTnqv6JgGDA0j",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer texto de la respuesta de Gemini\nconst respuesta = $input.first().json;\nlet textoRespuesta = \"\";\n\ntry {\n  // Obtenemos el texto y limpiamos posibles bloques de markdown\n  textoRespuesta = respuesta.text.trim();\n  textoRespuesta = textoRespuesta.replace(/```json/gi, \"\").replace(/```/gi, \"\").trim();\n} catch(e) {\n  return [{ json: { hayCorte: false, error: \"No se pudo leer de Gemini\" } }];\n}\n\n// Parsear el JSON\nlet cortes = [];\ntry {\n  cortes = JSON.parse(textoRespuesta);\n} catch(e) {\n  // Limpiar si hay texto extra\n  const match = textoRespuesta.match(/\\[[\\s\\S]*\\]/);\n  if (match) {\n    try { cortes = JSON.parse(match); } catch(e2) { cortes = []; }\n  }\n}\n\nif (!Array.isArray(cortes)) cortes = [];\n\nconst hayCorte = cortes.length > 0;\n\n// Resumen para email\nconst resumenEmail = cortes.map((c, i) => \n  `<div style=\"margin-bottom:16px;padding:12px;background:#f5f5f5;border-left:4px solid #e74c3c;border-radius:4px;\">\n    <strong>Corte ${i + 1}</strong><br>\n    📍 <strong>Zona:</strong> ${c.zona}<br>\n    🕐 <strong>Horario:</strong> ${c.hora_inicio} a ${c.hora_fin}<br>\n    📅 <strong>Fecha:</strong> ${c.fecha}<br>\n    🔧 <strong>Motivo:</strong> ${c.motivo}\n  </div>`\n).join(\"\");\n\n// Resumen para Slack/Texto\nconst resumenSlack = cortes.map((c, i) => \n  `*Corte ${i + 1}*\\n📍 *Zona:* ${c.zona}\\n🕐 *Horario:* ${c.hora_inicio} a ${c.hora_fin}\\n📅 *Fecha:* ${c.fecha}\\n🔧 *Motivo:* ${c.motivo}`\n).join(\"\\n\\n\");\n\n// SALIDA FINAL\nreturn [{\n  json: {\n    hayCorte,\n    cortes,\n    resumenEmail,\n    resumenSlack,\n    cantidad: cortes.length,\n    fecha: new Date().toLocaleDateString(\"es-AR\")\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -784,
+        -992
+      ],
+      "id": "cccca1ee-6846-4207-abe1-57f31e0ef18d",
+      "name": "Procesar respuesta Gemini"
+    }
+  ],
+  "connections": {
+    "HTTP Request EDERSA1": {
+      "main": [
+        [
+          {
+            "node": "Limpiar HTML1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpiar HTML1": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay corte en mi zona?1": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Alerta corte1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request EDERSA1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Procesar respuesta Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar respuesta Gemini": {
+      "main": [
+        [
+          {
+            "node": "¿Hay corte en mi zona?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d61e9d7087eed0ba4e62da3eb806652b1a8ac47079faa1f680b871c352d09115"
+  }
+}

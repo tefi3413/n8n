@@ -1,0 +1,250 @@
+﻿{
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            },
+            {
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1680,
+        -480
+      ],
+      "id": "ceee2175-65fa-4f6f-80d5-3154a53567e2",
+      "name": "Revisa pagina"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Extrae los cortes de luz para Cipolletti del siguiente texto. Devuelve un array JSON con: zona, fecha, hora_inicio, hora_fin y motivo. Si no hay cortes, devuelve []. Texto: {{ $json.texto }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -1136,
+        -480
+      ],
+      "id": "0bf20e82-8f92-4e4f-a88e-425c468b32fb",
+      "name": "Gemini",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "p8CnTnqv6JgGDA0j",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "Filtrado por zona con IA",
+        "height": 80
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1296,
+        -576
+      ],
+      "typeVersion": 1,
+      "id": "b172433c-e3d8-4fca-b384-198eae5af8c5",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "url": "https://www.edersa.com.ar/category/cortes-programados",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1504,
+        -480
+      ],
+      "id": "17a9d0b2-b324-4a88-93e7-71ba8603acac",
+      "name": "HTTP Request EDERSA."
+    },
+    {
+      "parameters": {
+        "sendTo": "euribe@casinosdelrio.com.ar",
+        "subject": "=⚡ Corte de luz en tu zona — {{ $json.fecha }}",
+        "message": "=<div style=\"font-family:Arial,sans-serif;max-width:600px;\">\n  <h2 style=\"color:#e74c3c;border-bottom:2px solid #e74c3c;padding-bottom:8px;\">⚡ Corte programado en tu zona</h2>\n  <p><strong>Fecha de consulta:</strong> {{ $json.fecha }}</p>\n  <p><strong>Cortes encontrados:</strong> {{ $json.cantidad }}</p>\n  <hr style=\"border:none;border-top:1px solid #eee;margin:16px 0;\">\n  {{ $json.resumenEmail }}\n  <hr style=\"border:none;border-top:1px solid #eee;margin:16px 0;\">\n  <p style=\"font-size:12px;color:#888;\">\n    <a href=\"https://www.edersa.com.ar/category/cortes-programados\">Ver todos los cortes en EDERSA</a> &nbsp;|&nbsp;\n    <a href=\"https://contingencias.edersa.com.ar/\">Mapa de cortes y contingencias</a>\n  </p>\n</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -464,
+        -496
+      ],
+      "id": "d46795f5-b187-4bb7-914d-74a80d505aaf",
+      "name": "Gmail - Alerta corte.",
+      "webhookId": "c6997842-1554-4594-a34a-46a1f89eed81",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "4Q20RMIFXr2J3Xfd",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cond-hayCorte",
+              "leftValue": "={{ $json.hayCorte }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -672,
+        -480
+      ],
+      "id": "5b9704bc-cf3f-488e-b958-23506d782fc6",
+      "name": "Hay corte en mi zona exacta?."
+    },
+    {
+      "parameters": {
+        "jsCode": "const respuesta = $input.first().json;\nlet cortes = [];\n\ntry {\n    // El texto viene en .text\n    const texto = respuesta.text.replace(/```json/gi, \"\").replace(/```/gi, \"\").trim();\n    cortes = JSON.parse(texto);\n} catch (e) {\n    cortes = [];\n}\n\n// CONFIGURACIÓN PARA EL CASINO DEL RÍO\nconst MI_CIUDAD = \"cipolletti\";\nconst PALABRAS_CLAVE_CASINO = [\"ruta 22\", \"pacheco\", \"casino\", \"puente carretero\", \"lisandro de la torre\", \"estado de israel\", \"pacheco bis\", \"pichi nahuel\"];\n\n// FILTRADO\nconst cortesRelevantes = cortes.filter(c => {\n    const zona = c.zona.toLowerCase();\n    const esCipo = zona.includes(MI_CIUDAD);\n    const esMiZona = PALABRAS_CLAVE_CASINO.some(p => zona.includes(p));\n    return esCipo && esMiZona;\n});\n\nconst hayCorte = cortesRelevantes.length > 0;\n\n// Resumen HTML para el mail\nconst resumenEmail = cortesRelevantes.map((c, i) => `\n  <div style=\"margin-bottom:16px;padding:12px;background:#fff5f5;border-left:4px solid #e74c3c;border-radius:4px;\">\n    <strong>⚠️ ALERTA CASINO: Corte ${i + 1}</strong><br>\n    📍 <b>Zona:</b> ${c.zona}<br>\n    📅 <b>Fecha:</b> ${c.fecha}<br>\n    🕐 <b>Horario:</b> ${c.hora_inicio} a ${c.hora_fin}<br>\n    🔧 <b>Motivo:</b> ${c.motivo}\n  </div>\n`).join(\"\");\n\nreturn [{\n    json: {\n        hayCorte,\n        cantidad: cortesRelevantes.length,\n        resumenEmail,\n        fecha: new Date().toLocaleDateString(\"es-AR\")\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -864,
+        -480
+      ],
+      "id": "786f50ad-6d0d-4d85-8440-463c6aec0d41",
+      "name": "Parsear y filtrar zona exacta."
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data || $input.first().json.body || \"\";\n\nconst textoLimpio = html\n  .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, \"\")\n  .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, \"\")\n  .replace(/<[^>]+>/g, \" \")\n  .replace(/\\s+/g, \" \")\n  .trim()\n  .substring(0, 8000);\n\nreturn [{ json: { texto: textoLimpio } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        -480
+      ],
+      "id": "290f6c77-f1c3-4e01-af25-0af68d27bb4d",
+      "name": "Limpiar HTML."
+    }
+  ],
+  "connections": {
+    "Revisa pagina": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request EDERSA.",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parsear y filtrar zona exacta.",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request EDERSA.": {
+      "main": [
+        [
+          {
+            "node": "Limpiar HTML.",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay corte en mi zona exacta?.": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Alerta corte.",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear y filtrar zona exacta.": {
+      "main": [
+        [
+          {
+            "node": "Hay corte en mi zona exacta?.",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpiar HTML.": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d61e9d7087eed0ba4e62da3eb806652b1a8ac47079faa1f680b871c352d09115"
+  }
+}
